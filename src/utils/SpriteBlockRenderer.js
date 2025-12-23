@@ -13,56 +13,70 @@ export default class SpriteBlockRenderer {
    * @param {number} colorIndex - Which color from palette to use (0-6)
    */
   static createBlockTexture(scene, colorPalette, level, key, colorIndex) {
-    // Get the sprite sheet
-    const spriteSheet = scene.textures.get('blocks-spritesheet').getSourceImage();
-    
-    // Create canvas to extract and colorize the sprite
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
     canvas.width = BLOCK_SIZE;
     canvas.height = BLOCK_SIZE;
-    
-    // Extract the 8x8 sprite for this level (level 1 = pixels 0-7, level 2 = 8-15, etc.)
-    const spriteX = (level - 1) * 8;
-    
-    // Draw the sprite section
-    const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
-    tempCanvas.width = spriteSheet.width;
-    tempCanvas.height = spriteSheet.height;
-    tempCtx.drawImage(spriteSheet, 0, 0);
-    
-    // Get the sprite data
-    const spriteData = tempCtx.getImageData(spriteX, 0, 8, 8);
-    const pixels = spriteData.data;
-    
+
     // Get the color to use
     const color = colorPalette[colorIndex % colorPalette.length];
     const r = (color >> 16) & 0xFF;
     const g = (color >> 8) & 0xFF;
     const b = color & 0xFF;
-    
-    // Colorize: black pixels become the color, white pixels become transparent
+
+    // Get the sprite sheet and extract pattern
+    const spriteSheet = scene.textures.get('blocks-spritesheet').getSourceImage();
+    const spriteX = (level - 1) * BLOCK_SIZE;
+
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.imageSmoothingEnabled = false;
+    tempCanvas.width = spriteSheet.width;
+    tempCanvas.height = spriteSheet.height;
+    tempCtx.drawImage(spriteSheet, 0, 0);
+
+    const spriteData = tempCtx.getImageData(spriteX, 0, BLOCK_SIZE, BLOCK_SIZE);
+    const pixels = spriteData.data;
+
+    // Create output image data
+    const outputData = ctx.createImageData(BLOCK_SIZE, BLOCK_SIZE);
+    const output = outputData.data;
+
+    // Colorize: use grayscale brightness to modulate the base color
+    // Grayscale values create depth (lighter/darker variations)
     for (let i = 0; i < pixels.length; i += 4) {
-      const brightness = pixels[i]; // Since it's black/white, just check R channel
-      
-      if (brightness < 128) {
-        // Black pixel - make it the color
-        pixels[i] = r;
-        pixels[i + 1] = g;
-        pixels[i + 2] = b;
-        pixels[i + 3] = 255;
+      const alpha = pixels[i + 3];
+
+      if (alpha > 0) {
+        // Get grayscale brightness (0-255)
+        const brightness = pixels[i]; // R channel (grayscale, so R=G=B)
+
+        // Normalize brightness to a multiplier (0.5 to 1.5)
+        // 128 (50% gray) = 1.0x (base color)
+        // 0 (black) = 0.5x (darkest)
+        // 255 (white) = 1.5x (lightest)
+        const multiplier = 0.5 + (brightness / 255) * 1.0;
+
+        // Apply brightness multiplier to base color
+        output[i] = Math.min(255, Math.floor(r * multiplier));
+        output[i + 1] = Math.min(255, Math.floor(g * multiplier));
+        output[i + 2] = Math.min(255, Math.floor(b * multiplier));
+        output[i + 3] = 255;
       } else {
-        // White pixel - make it transparent
-        pixels[i + 3] = 0;
+        // Transparent pixel
+        output[i] = 0;
+        output[i + 1] = 0;
+        output[i + 2] = 0;
+        output[i + 3] = 0;
       }
     }
-    
-    // Draw the colorized sprite
-    ctx.putImageData(spriteData, 0, 0);
-    
-    // Create texture from canvas
-    scene.textures.addCanvas(key, canvas);
+
+    ctx.putImageData(outputData, 0, 0);
+
+    // Create texture and set nearest neighbor
+    const texture = scene.textures.addCanvas(key, canvas);
+    texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
   }
 
   /**

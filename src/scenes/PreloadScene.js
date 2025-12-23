@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { MAX_LEVEL } from '../constants.js';
+import { MAX_LEVEL, GAME_WIDTH, GAME_HEIGHT } from '../constants.js';
 
 export default class PreloadScene extends Phaser.Scene {
   constructor() {
@@ -7,8 +7,14 @@ export default class PreloadScene extends Phaser.Scene {
   }
 
   preload() {
-    // Load block sprite sheet
-    this.load.image('blocks-spritesheet', 'assets/blocks.png');
+    // Load title screen
+    this.load.image('title', 'assets/title.png');
+
+    // Load block sprite sheet (grayscale with depth)
+    this.load.image('blocks-spritesheet', 'assets/blocks-sprite.png');
+
+    // Load bitmap font (Thick 8x8 from frostyfreeze)
+    this.load.bitmapFont('pixel-font', 'assets/fonts/thick_8x8.png', 'assets/fonts/thick_8x8.xml');
 
     // Load backdrops for all levels
     for (let i = 1; i <= MAX_LEVEL; i++) {
@@ -19,30 +25,37 @@ export default class PreloadScene extends Phaser.Scene {
     for (let i = 1; i <= MAX_LEVEL; i++) {
       this.load.audio(`music-${i}`, `assets/music/level-${i}/track.mp3`);
     }
-
-    // Show loading progress
-    const loadingText = this.add.text(128, 112, 'LOADING...', {
-      fontFamily: 'monospace',
-      fontSize: '8px',
-      color: '#ffffff'
-    }).setOrigin(0.5);
-
-    this.load.on('progress', (value) => {
-      loadingText.setText(`LOADING ${Math.floor(value * 100)}%`);
-    });
-
-    this.load.on('complete', () => {
-      loadingText.destroy();
-    });
   }
 
   create() {
-    // Show start text
-    this.add.text(128, 112, 'PRESS SPACE TO START', {
-      fontFamily: 'monospace',
-      fontSize: '8px',
-      color: '#ffffff'
-    }).setOrigin(0.5);
+    // Title image fills entire screen (256x224)
+    const titleImage = this.add.image(0, 0, 'title');
+    titleImage.setOrigin(0, 0);
+    titleImage.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+
+    // Game title
+    const titleText = this.add.bitmapText(GAME_WIDTH / 2, 60, 'pixel-font', 'STACK PROTOCOL', 20).setOrigin(0.5);
+    titleText.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    titleText.setDepth(10);
+
+    // "Press space to start" text
+    const startText = this.add.bitmapText(GAME_WIDTH / 2, 140, 'pixel-font', 'PRESS SPACE TO START', 10).setOrigin(0.5);
+    startText.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    startText.setDepth(10);
+
+    // Blinking effect for start text
+    this.tweens.add({
+      targets: startText,
+      alpha: 0.3,
+      duration: 600,
+      yoyo: true,
+      repeat: -1
+    });
+
+    // Credits text
+    const creditsText = this.add.bitmapText(GAME_WIDTH / 2, 200, 'pixel-font', 'BY MARCO VAN HYLCKAMA VLIEG', 10).setOrigin(0.5);
+    creditsText.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    creditsText.setDepth(10);
 
     // Wait for space key to start
     this.input.keyboard.once('keydown-SPACE', () => {

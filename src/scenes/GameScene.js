@@ -12,8 +12,51 @@ export default class GameScene extends Phaser.Scene {
   constructor() { super({ key: 'GameScene' }); }
 
   create() {
+    // CRITICAL: Ensure canvas has focus and can receive keyboard events
+    this.game.canvas.setAttribute('tabindex', '1');
+    this.game.canvas.focus();
+    this.game.canvas.style.outline = 'none';
+
+    // Visual indicator for focus loss
+    this.focusWarning = null;
+
+    // Re-focus on any click
+    this.game.canvas.addEventListener('click', () => {
+      this.game.canvas.focus();
+      if (this.focusWarning) {
+        this.focusWarning.destroy();
+        this.focusWarning = null;
+      }
+    });
+
+    // Monitor focus state
+    this.game.canvas.addEventListener('blur', () => {
+      console.log('Canvas lost focus!');
+      if (!this.focusWarning) {
+        this.focusWarning = this.add.text(GAME_WIDTH / 2, 10, 'CLICK TO FOCUS', {
+          fontSize: '8px',
+          color: '#ff0000',
+          backgroundColor: '#000000'
+        }).setOrigin(0.5).setDepth(300);
+      }
+    });
+
+    this.game.canvas.addEventListener('focus', () => {
+      console.log('Canvas gained focus');
+      if (this.focusWarning) {
+        this.focusWarning.destroy();
+        this.focusWarning = null;
+      }
+    });
+
+    // Re-focus if window regains focus
+    window.addEventListener('focus', () => {
+      this.game.canvas.focus();
+    });
+
     this.grid = this.createEmptyGrid();
     this.score = 0; this.level = 1; this.lines = 0; this.gameOver = false;
+    this.clearing = false;
     this.dropCounter = 0; this.dropInterval = LEVEL_SPEEDS[0];
     this.softDropping = false; this.softDropCounter = 0;
     this.currentPiece = null; this.nextPiece = null;
@@ -61,37 +104,69 @@ export default class GameScene extends Phaser.Scene {
   }
 
   setupInput() {
+    // Simple polling - use Phaser's built-in JustDown
     this.cursors = this.input.keyboard.createCursorKeys();
     this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     this.pKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P);
-    this.leftKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.LEFT);
-    this.rightKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.RIGHT);
-    this.downKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN);
-    this.upKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.UP);
-    this.dasDelay = 16; this.dasSpeed = 6; this.dasCounter = 0; this.dasDirection = 0;
+
+    // DAS settings for left/right auto-repeat when HOLDING
+    this.dasDelay = 16;  // Frames before repeat starts (longer delay)
+    this.dasSpeed = 4;   // Frames between repeats (slower repeat)
+    this.leftHoldCounter = 0;
+    this.rightHoldCounter = 0;
+
+    // Grace period to prevent double-taps
+    this.moveGracePeriod = 2; // Minimum frames between moves
+    this.leftGraceCounter = 0;
+    this.rightGraceCounter = 0;
+
     this.paused = false;
-    this.spaceReleased = true; // Track if space was released before allowing another hard drop
+  }
+
+  createBitmapText(x, y, text, size = 10) {
+    const t = this.add.bitmapText(x, y, 'pixel-font', text.toUpperCase(), size);
+    t.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    return t;
   }
 
   createUI() {
-    const ts = { fontFamily: 'monospace', fontSize: '8px', color: '#ffffff' };
     const g = this.add.graphics();
 
-    // Draw UI frames and play area background
-    this.drawNESFrame(g, 4, 4, 76, 56);
-    this.drawNESFrame(g, 180, 36, 72, 56);
-    g.fillStyle(0x000000, 1);
-    g.fillRect(PLAY_AREA_X, PLAY_AREA_Y, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
-    this.drawNESFrame(g, PLAY_AREA_X - 4, PLAY_AREA_Y - 4, PLAY_AREA_WIDTH + 8, PLAY_AREA_HEIGHT + 8);
+    // Play area frame (frame draws around the play area)
+    this.drawNESFrame(g, PLAY_AREA_X - 2, PLAY_AREA_Y - 2, PLAY_AREA_WIDTH + 5, PLAY_AREA_HEIGHT + 4);
 
-    // UI text
-    this.add.text(UI.SCORE_X, UI.SCORE_Y - 8, 'SCORE', ts);
-    this.scoreText = this.add.text(UI.SCORE_X, UI.SCORE_Y, '000000', ts);
-    this.add.text(UI.LEVEL_X, UI.LEVEL_Y - 8, 'LEVEL', ts);
-    this.levelText = this.add.text(UI.LEVEL_X, UI.LEVEL_Y, '1', ts);
-    this.add.text(UI.LINES_X, UI.LINES_Y - 8, 'LINES', ts);
-    this.linesText = this.add.text(UI.LINES_X, UI.LINES_Y, '0', ts);
-    this.add.text(UI.NEXT_X, UI.NEXT_Y, 'NEXT', ts);
+    // UI text positions - align first frame with play area top
+    const frameWidth = UI.PANEL_WIDTH - 3;
+    const x = UI.PANEL_X + UI.PADDING;
+    let y = PLAY_AREA_Y; // Align with play area top
+
+    // SCORE frame
+    this.drawNESFrame(g, UI.PANEL_X, y - 2, frameWidth, 26);
+    this.createBitmapText(x, y + 2, 'SCORE');
+    y += 12;
+    this.scoreText = this.createBitmapText(x, y + 2, '000000');
+    y += 12 + 12; // 12px vertical space
+
+    // LEVEL frame
+    this.drawNESFrame(g, UI.PANEL_X, y - 2, frameWidth, 26);
+    this.createBitmapText(x, y + 2, 'LEVEL');
+    y += 12;
+    this.levelText = this.createBitmapText(x, y + 2, '1');
+    y += 12 + 12; // 12px vertical space
+
+    // LINES frame
+    this.drawNESFrame(g, UI.PANEL_X, y - 2, frameWidth, 26);
+    this.createBitmapText(x, y + 2, 'LINES');
+    y += 12;
+    this.linesText = this.createBitmapText(x, y + 2, '0');
+    y += 12 + 12; // 12px vertical space
+
+    // NEXT frame
+    const nextFrameHeight = 42; // Enough for piece preview + 2px top padding
+    this.drawNESFrame(g, UI.PANEL_X, y - 2, frameWidth, nextFrameHeight);
+    this.createBitmapText(x, y + 2, 'NEXT');
+    this.nextPieceY = y + 16;
+    this.nextPieceX = x;
   }
 
   drawNESFrame(g, x, y, w, h) {
@@ -118,9 +193,14 @@ export default class GameScene extends Phaser.Scene {
 
   update(time, delta) {
     if (this.gameOver) return;
-    if (this.clearing) return; // Wait for line clear animation
-    if (Phaser.Input.Keyboard.JustDown(this.pKey)) this.togglePause();
-    if (this.paused) return;
+
+    // Pause check - always available
+    if (Phaser.Input.Keyboard.JustDown(this.pKey)) {
+      this.togglePause();
+    }
+
+    if (this.clearing || this.paused) return;
+
     this.handleInput();
     this.dropCounter++;
     if (this.dropCounter >= this.dropInterval) { this.dropCounter = 0; this.moveDown(); }
@@ -132,10 +212,10 @@ export default class GameScene extends Phaser.Scene {
     if (this.paused) {
       this.pauseOverlay = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.8);
       this.pauseOverlay.setDepth(100);
-      this.pauseText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'PAUSED', { fontFamily: 'monospace', fontSize: '16px', color: '#ffff00' }).setOrigin(0.5);
-      this.pauseText.setDepth(101);
-      this.pauseHintText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20, 'PRESS P', { fontFamily: 'monospace', fontSize: '8px', color: '#ffffff' }).setOrigin(0.5);
-      this.pauseHintText.setDepth(101);
+      this.pauseText = this.createBitmapText(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'PAUSED');
+      this.pauseText.setOrigin(0.5).setDepth(101);
+      this.pauseHintText = this.createBitmapText(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 12, 'PRESS P');
+      this.pauseHintText.setOrigin(0.5).setDepth(101);
       if (this.currentMusic) this.currentMusic.pause();
     } else {
       if (this.pauseOverlay) { this.pauseOverlay.destroy(); this.pauseOverlay = null; }
@@ -146,26 +226,65 @@ export default class GameScene extends Phaser.Scene {
   }
 
   handleInput() {
-    if (Phaser.Input.Keyboard.JustDown(this.upKey)) this.rotatePiece();
-
-    // Hard drop only if space was released first
-    if (this.spaceKey.isDown && this.spaceReleased) {
-      this.hardDrop();
-      this.spaceReleased = false;
+    // Rotation - JustDown ensures one action per press
+    if (Phaser.Input.Keyboard.JustDown(this.cursors.up)) {
+      this.rotatePiece();
     }
-    if (!this.spaceKey.isDown) this.spaceReleased = true;
-    if (this.downKey.isDown) {
+
+    // Hard drop - JustDown ensures one action per press
+    if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+      this.hardDrop();
+    }
+
+    // Soft drop (down key held) - continuous action
+    if (this.cursors.down.isDown) {
       if (!this.softDropping) { this.softDropping = true; this.softDropCounter = 0; }
       this.softDropCounter++;
-      if (this.softDropCounter >= 2) { this.softDropCounter = 0; if (this.moveDown()) { this.score += SCORES.SOFT_DROP; this.updateUI(); } }
-    } else { this.softDropping = false; this.softDropCounter = 0; }
-    if (this.leftKey.isDown) {
-      if (this.dasDirection !== -1) { this.dasDirection = -1; this.dasCounter = 0; this.moveLeft(); }
-      else { this.dasCounter++; if (this.dasCounter >= this.dasDelay && this.dasCounter % this.dasSpeed === 0) this.moveLeft(); }
-    } else if (this.rightKey.isDown) {
-      if (this.dasDirection !== 1) { this.dasDirection = 1; this.dasCounter = 0; this.moveRight(); }
-      else { this.dasCounter++; if (this.dasCounter >= this.dasDelay && this.dasCounter % this.dasSpeed === 0) this.moveRight(); }
-    } else { this.dasDirection = 0; this.dasCounter = 0; }
+      if (this.softDropCounter >= 2) {
+        this.softDropCounter = 0;
+        if (this.moveDown()) {
+          this.score += SCORES.SOFT_DROP;
+          this.updateUI();
+        }
+      }
+    } else {
+      this.softDropping = false;
+      this.softDropCounter = 0;
+    }
+
+    // Decrement grace counters
+    if (this.leftGraceCounter > 0) this.leftGraceCounter--;
+    if (this.rightGraceCounter > 0) this.rightGraceCounter--;
+
+    // LEFT - JustDown for first press, then auto-repeat when held
+    if (Phaser.Input.Keyboard.JustDown(this.cursors.left) && this.leftGraceCounter === 0) {
+      this.moveLeft();
+      this.leftHoldCounter = 0;
+      this.leftGraceCounter = this.moveGracePeriod;
+    } else if (this.cursors.left.isDown && this.leftGraceCounter === 0) {
+      this.leftHoldCounter++;
+      if (this.leftHoldCounter >= this.dasDelay && (this.leftHoldCounter - this.dasDelay) % this.dasSpeed === 0) {
+        this.moveLeft();
+        this.leftGraceCounter = this.moveGracePeriod;
+      }
+    } else if (!this.cursors.left.isDown) {
+      this.leftHoldCounter = 0;
+    }
+
+    // RIGHT - JustDown for first press, then auto-repeat when held
+    if (Phaser.Input.Keyboard.JustDown(this.cursors.right) && this.rightGraceCounter === 0) {
+      this.moveRight();
+      this.rightHoldCounter = 0;
+      this.rightGraceCounter = this.moveGracePeriod;
+    } else if (this.cursors.right.isDown && this.rightGraceCounter === 0) {
+      this.rightHoldCounter++;
+      if (this.rightHoldCounter >= this.dasDelay && (this.rightHoldCounter - this.dasDelay) % this.dasSpeed === 0) {
+        this.moveRight();
+        this.rightGraceCounter = this.moveGracePeriod;
+      }
+    } else if (!this.cursors.right.isDown) {
+      this.rightHoldCounter = 0;
+    }
   }
 
   moveLeft() { if (!this.checkCollision(this.currentPiece, this.currentX - 1, this.currentY)) { this.currentX--; SoundGenerator.playMove(); } }
@@ -219,96 +338,124 @@ export default class GameScene extends Phaser.Scene {
   }
 
   checkAndClearLines() {
-    // Find complete lines
+    // Find complete lines - a line is complete ONLY if every cell is filled
     const completeLines = [];
     for (let y = 0; y < GRID_HEIGHT; y++) {
       let isComplete = true;
       for (let x = 0; x < GRID_WIDTH; x++) {
-        if (!this.grid[y][x]) { isComplete = false; break; }
+        if (!this.grid[y][x]) {
+          isComplete = false;
+          break;
+        }
       }
-      if (isComplete) completeLines.push(y);
+      if (isComplete) {
+        console.log(`Line ${y} is complete:`, JSON.stringify(this.grid[y]));
+        completeLines.push(y);
+      }
     }
 
     if (completeLines.length > 0) {
-      this.clearing = true; // Pause game during animation
+      console.log('Complete lines found:', completeLines);
+      console.log('Grid state:', JSON.stringify(this.grid));
+    }
 
-      // Play sound
-      if (completeLines.length === 4) SoundGenerator.playTetris();
-      else SoundGenerator.playLineClear();
-
-      // First redraw to show locked piece, then animate
-      this.redrawGrid();
-
-      // Animate the lines, then clear them
-      this.animateLineClear(completeLines, () => {
-        this.finishLineClear(completeLines);
-      });
-    } else {
+    if (completeLines.length === 0) {
       this.spawnPiece();
       this.redrawGrid();
+      return;
     }
+
+    // Block game updates during line clear
+    this.clearing = true;
+
+    // Play sound
+    if (completeLines.length === 4) SoundGenerator.playTetris();
+    else SoundGenerator.playLineClear();
+
+    // Show the locked piece first
+    this.redrawGrid();
+
+    // Run the line clear animation, then apply changes
+    this.animateLineClear(completeLines);
   }
 
-  animateLineClear(lines, onComplete) {
-    // Hide the blocks that are being cleared
-    this.blockSprites.forEach(sprite => {
-      const spriteY = Math.floor((sprite.y - PLAY_AREA_Y) / BLOCK_SIZE);
-      if (lines.includes(spriteY)) {
-        sprite.setVisible(false);
-      }
-    });
-
-    // Create crush effect sprites for each block in the clearing lines
+  animateLineClear(completeLines) {
+    // Create spectacular crush effect for each block
     const crushSprites = [];
+    const particles = [];
 
-    lines.forEach(y => {
+    completeLines.forEach(y => {
       for (let x = 0; x < GRID_WIDTH; x++) {
         const px = PLAY_AREA_X + x * BLOCK_SIZE;
         const py = PLAY_AREA_Y + y * BLOCK_SIZE;
 
-        // White flash block
-        const flash = this.add.rectangle(px + BLOCK_SIZE/2, py + BLOCK_SIZE/2, BLOCK_SIZE, BLOCK_SIZE, 0xffffff);
-        flash.setDepth(50);
-        crushSprites.push(flash);
+        // Main block that will get crushed
+        const block = this.add.rectangle(px + BLOCK_SIZE/2, py + BLOCK_SIZE/2, BLOCK_SIZE, BLOCK_SIZE, 0xffffff);
+        block.setDepth(50);
+        crushSprites.push(block);
+
+        // Create 4 particle pieces per block for explosion
+        for (let i = 0; i < 4; i++) {
+          const particle = this.add.rectangle(px + BLOCK_SIZE/2, py + BLOCK_SIZE/2, 2, 2, 0xffffff);
+          particle.setDepth(51);
+          particle.setVisible(false);
+          particles.push({ sprite: particle, x: px + BLOCK_SIZE/2, y: py + BLOCK_SIZE/2 });
+        }
       }
     });
 
-    // Phase 1: Flash white
+    // Phase 1: Rapid flash
     this.tweens.add({
       targets: crushSprites,
-      alpha: { from: 1, to: 0.7 },
-      duration: 80,
+      alpha: { from: 1, to: 0.5 },
+      duration: 60,
       yoyo: true,
-      repeat: 1,
+      repeat: 2,
       onComplete: () => {
-        // Phase 2: Crush horizontally (squeeze from sides to center)
+        // Phase 2: Violent crush from top and bottom
         this.tweens.add({
           targets: crushSprites,
-          scaleY: 0.1,
-          scaleX: 1.5,
-          alpha: 0.8,
-          duration: 100,
-          ease: 'Power2',
+          scaleY: 0.05,
+          scaleX: 2.0,
+          alpha: 0.9,
+          duration: 80,
+          ease: 'Power3',
           onComplete: () => {
-            // Phase 3: Explode outward and fade
-            crushSprites.forEach(sprite => {
-              const randomX = (Math.random() - 0.5) * 16;
-              const randomY = (Math.random() - 0.5) * 8;
-              this.tweens.add({
-                targets: sprite,
-                x: sprite.x + randomX,
-                y: sprite.y + randomY,
-                scaleX: 0,
-                scaleY: 0,
-                alpha: 0,
-                duration: 120,
-                ease: 'Power2'
-              });
-            });
+            // Phase 3: Horizontal crush to nothing
+            this.tweens.add({
+              targets: crushSprites,
+              scaleX: 0,
+              scaleY: 0.02,
+              alpha: 0.5,
+              duration: 60,
+              ease: 'Power2',
+              onComplete: () => {
+                // Phase 4: Particle explosion
+                particles.forEach(p => {
+                  p.sprite.setVisible(true);
+                  const angle = Math.random() * Math.PI * 2;
+                  const speed = 20 + Math.random() * 30;
+                  const vx = Math.cos(angle) * speed;
+                  const vy = Math.sin(angle) * speed;
 
-            this.time.delayedCall(130, () => {
-              crushSprites.forEach(s => s.destroy());
-              onComplete();
+                  this.tweens.add({
+                    targets: p.sprite,
+                    x: p.x + vx,
+                    y: p.y + vy,
+                    alpha: 0,
+                    scaleX: 0,
+                    scaleY: 0,
+                    duration: 200 + Math.random() * 100,
+                    ease: 'Power2'
+                  });
+                });
+
+                this.time.delayedCall(300, () => {
+                  crushSprites.forEach(s => s.destroy());
+                  particles.forEach(p => p.sprite.destroy());
+                  this.finishLineClear(completeLines);
+                });
+              }
             });
           }
         });
@@ -317,80 +464,170 @@ export default class GameScene extends Phaser.Scene {
   }
 
   finishLineClear(completeLines) {
-    const linesCleared = completeLines.length;
-    const sortedLines = [...completeLines].sort((a, b) => a - b); // Sort ascending
+    // Apply the grid changes first
+    const validLines = completeLines.filter(y => {
+      if (y < 0 || y >= GRID_HEIGHT) return false;
+      for (let x = 0; x < GRID_WIDTH; x++) {
+        if (!this.grid[y][x]) return false;
+      }
+      return true;
+    });
 
-    // Calculate how far each row needs to fall
-    // For each block sprite above cleared lines, animate it falling
-    const spritesToAnimate = [];
+    if (validLines.length === 0) {
+      console.warn('No valid lines to clear after validation');
+      this.clearing = false;
+      this.spawnPiece();
+      this.redrawGrid();
+      return;
+    }
+
+    // Build new grid
+    const newGrid = [];
+    const linesToRemove = new Set(validLines);
+
+    for (let i = 0; i < validLines.length; i++) {
+      newGrid.push(new Array(GRID_WIDTH).fill(0));
+    }
+
+    for (let y = 0; y < GRID_HEIGHT; y++) {
+      if (!linesToRemove.has(y)) {
+        newGrid.push([...this.grid[y]]);
+      }
+    }
+
+    this.grid = newGrid;
+
+    // Now animate the falling blocks
+    // Rebuild sprites from new grid state
+    this.redrawGrid();
+
+    // Animate all sprites falling into place
+    const sortedLines = [...validLines].sort((a, b) => a - b);
 
     this.blockSprites.forEach(sprite => {
-      if (!sprite.visible) return; // Skip already hidden (cleared) blocks
-
       const spriteGridY = Math.floor((sprite.y - PLAY_AREA_Y) / BLOCK_SIZE);
 
-      // Count how many cleared lines are below this sprite
+      // Count how many cleared lines were below this sprite's ORIGINAL position
       let linesBelowCount = 0;
       sortedLines.forEach(clearedY => {
-        if (clearedY > spriteGridY) linesBelowCount++;
+        if (clearedY > spriteGridY - validLines.length) {
+          linesBelowCount++;
+        }
       });
 
       if (linesBelowCount > 0) {
-        spritesToAnimate.push({
-          sprite: sprite,
-          fallDistance: linesBelowCount * BLOCK_SIZE
+        // Start sprite higher, then animate down to current position
+        const startY = sprite.y - (linesBelowCount * BLOCK_SIZE);
+        sprite.y = startY;
+
+        this.tweens.add({
+          targets: sprite,
+          y: sprite.y + (linesBelowCount * BLOCK_SIZE),
+          duration: 150,
+          ease: 'Bounce.easeOut'
         });
       }
     });
 
-    // Animate falling blocks
-    if (spritesToAnimate.length > 0) {
-      const tweens = spritesToAnimate.map(item => {
-        return this.tweens.add({
-          targets: item.sprite,
-          y: item.sprite.y + item.fallDistance,
-          duration: 150,
-          ease: 'Bounce.easeOut'
-        });
-      });
-
-      // Wait for all animations to complete
-      this.time.delayedCall(160, () => {
-        this.applyLineClear(completeLines, linesCleared);
-      });
-    } else {
-      this.applyLineClear(completeLines, linesCleared);
-    }
+    // Wait for fall animation, then finish
+    this.time.delayedCall(160, () => {
+      this.finishScoring(validLines);
+    });
   }
 
-  applyLineClear(completeLines, linesCleared) {
-    // Remove lines from grid (sort descending so indices stay valid)
-    [...completeLines].sort((a, b) => b - a).forEach(y => {
-      this.grid.splice(y, 1);
-      this.grid.unshift(new Array(GRID_WIDTH).fill(0));
-    });
-
-    this.lines += linesCleared;
+  finishScoring(validLines) {
+    // Update score
+    this.lines += validLines.length;
     const levelMultiplier = this.level;
-    switch (linesCleared) {
+    switch (validLines.length) {
       case 1: this.score += SCORES.SINGLE * levelMultiplier; break;
       case 2: this.score += SCORES.DOUBLE * levelMultiplier; break;
       case 3: this.score += SCORES.TRIPLE * levelMultiplier; break;
       case 4: this.score += SCORES.TETRIS * levelMultiplier; break;
     }
 
+    // Check for level up
     const newLevel = Math.min(MAX_LEVEL, Math.floor(this.lines / LINES_PER_LEVEL) + 1);
     if (newLevel > this.level) {
       this.level = newLevel;
       this.dropInterval = LEVEL_SPEEDS[this.level - 1];
       SoundGenerator.playLevelUp();
-      this.loadLevel(this.level);
-    }
 
-    this.updateUI();
-    this.clearing = false; // Resume game
-    this.spawnPiece();
-    this.redrawGrid();
+      // Exciting level transition!
+      this.showLevelTransition(newLevel);
+    } else {
+      this.updateUI();
+      this.clearing = false;
+      this.spawnPiece();
+    }
+  }
+
+
+
+  showLevelTransition(newLevel) {
+    // Keep game paused during transition
+    this.clearing = true;
+
+    // Flash effect
+    const flash = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0xffffff);
+    flash.setDepth(200);
+    flash.setAlpha(0);
+
+    // Level up text
+    const levelText = this.createBitmapText(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 10, `LEVEL ${newLevel}`, 20);
+    levelText.setOrigin(0.5);
+    levelText.setDepth(201);
+    levelText.setAlpha(0);
+
+    // Subtitle
+    const subtitle = this.createBitmapText(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 15, 'SPEED UP', 10);
+    subtitle.setOrigin(0.5);
+    subtitle.setDepth(201);
+    subtitle.setAlpha(0);
+
+    // Animation sequence
+    this.tweens.add({
+      targets: flash,
+      alpha: 0.8,
+      duration: 100,
+      yoyo: true,
+      repeat: 2,
+      onComplete: () => {
+        // Show level text with zoom effect
+        levelText.setScale(0.5);
+        subtitle.setScale(0.5);
+
+        this.tweens.add({
+          targets: [levelText, subtitle],
+          alpha: 1,
+          scale: 1,
+          duration: 200,
+          ease: 'Back.easeOut',
+          onComplete: () => {
+            // Hold for a moment
+            this.time.delayedCall(800, () => {
+              // Fade out
+              this.tweens.add({
+                targets: [levelText, subtitle, flash],
+                alpha: 0,
+                duration: 200,
+                onComplete: () => {
+                  flash.destroy();
+                  levelText.destroy();
+                  subtitle.destroy();
+
+                  // Load new level
+                  this.loadLevel(newLevel);
+                  this.updateUI();
+                  this.clearing = false;
+                  this.spawnPiece();
+                }
+              });
+            });
+          }
+        });
+      }
+    });
   }
 
   redrawGrid() {
@@ -451,8 +688,8 @@ export default class GameScene extends Phaser.Scene {
     this.nextPieceSprites = [];
     if (!this.nextPiece) return;
     const shape = this.nextPiece.shape;
-    const startX = UI.NEXT_X + 4;
-    const startY = UI.NEXT_Y + 16;
+    const startX = this.nextPieceX;
+    const startY = this.nextPieceY;
     for (let row = 0; row < shape.length; row++) {
       for (let col = 0; col < shape[row].length; col++) {
         if (shape[row][col]) {
@@ -481,11 +718,11 @@ export default class GameScene extends Phaser.Scene {
     const overlay = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000);
     overlay.setDepth(100);
 
-    const gameOverText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'GAME OVER', { fontFamily: 'monospace', fontSize: '16px', color: '#ff0000' }).setOrigin(0.5);
-    gameOverText.setDepth(101);
+    const gameOverText = this.createBitmapText(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'GAME OVER');
+    gameOverText.setOrigin(0.5).setDepth(101);
 
-    const restartText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20, 'PRESS SPACE', { fontFamily: 'monospace', fontSize: '8px', color: '#ffffff' }).setOrigin(0.5);
-    restartText.setDepth(101);
+    const restartText = this.createBitmapText(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 12, 'PRESS SPACE');
+    restartText.setOrigin(0.5).setDepth(101);
 
     this.input.keyboard.once('keydown-SPACE', () => { this.scene.restart(); });
   }

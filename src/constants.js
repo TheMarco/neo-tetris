@@ -2,17 +2,20 @@
 export const GAME_WIDTH = 256;
 export const GAME_HEIGHT = 224;
 
+// Bitmap font character set
+export const BITMAP_FONT_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
 // Grid configuration
 export const BLOCK_SIZE = 8; // 8x8 pixel blocks for retro feel
 export const GRID_WIDTH = 10;
 export const GRID_HEIGHT = 20;
 export const PLAY_AREA_WIDTH = GRID_WIDTH * BLOCK_SIZE; // 80 pixels
 export const PLAY_AREA_HEIGHT = GRID_HEIGHT * BLOCK_SIZE; // 160 pixels
-export const PLAY_AREA_X = 88; // Centered with room for UI
-export const PLAY_AREA_Y = 32; // Room for header
+export const PLAY_AREA_X = 80; // Centered with room for UI
+export const PLAY_AREA_Y = 48; // Room for header
 
 // Level progression
-export const LINES_PER_LEVEL = 10;
+export const LINES_PER_LEVEL = 2; // Temporary for testing
 export const MAX_LEVEL = 10;
 
 // Tetromino shapes (NES Tetris style)
@@ -82,29 +85,28 @@ export const SCORES = {
 };
 
 // Game speeds (frames per drop) - Higher = slower
-// Very gradual progression for better playability
+// Smooth progression, gets hard at level 6+
 export const LEVEL_SPEEDS = [
-  90,  // Level 1 - very slow, beginner friendly
+  90,  // Level 1 - relaxed start
   80,  // Level 2
   70,  // Level 3
   60,  // Level 4
   50,  // Level 5
-  40,  // Level 6
-  32,  // Level 7
-  24,  // Level 8
-  16,  // Level 9
-  10   // Level 10 - fast
+  35,  // Level 6 - starts getting hard
+  25,  // Level 7
+  18,  // Level 8
+  12,  // Level 9
+  6    // Level 10 - very challenging
 ];
 
-// UI Layout
+// UI Layout - single panel to the right of play area
 export const UI = {
-  SCORE_X: 12,
-  SCORE_Y: 20,
-  LEVEL_X: 12,
-  LEVEL_Y: 36,
-  LINES_X: 12,
-  LINES_Y: 52,
-  NEXT_X: 188,
-  NEXT_Y: 44
+  // Panel positioned right of play area with 8px gap between frames
+  PANEL_X: PLAY_AREA_X + PLAY_AREA_WIDTH + 16,
+  PANEL_Y: PLAY_AREA_Y,
+  PANEL_WIDTH: 64,
+  PANEL_HEIGHT: PLAY_AREA_HEIGHT,
+  PADDING: 6,
+  LINE_HEIGHT: 20
 };
 
