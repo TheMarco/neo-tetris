@@ -51,14 +51,14 @@ export default class ColorExtractor {
     const palette = [];
     for (let i = 0; i < sortedColors.length && palette.length < 7; i++) {
       const color = sortedColors[i];
-      
+
       // Ensure color is not too dark (visible on dark backgrounds)
       const r = (color >> 16) & 0xFF;
       const g = (color >> 8) & 0xFF;
       const b = color & 0xFF;
       const brightness = (r + g + b) / 3;
-      
-      if (brightness > 40) { // Skip very dark colors
+
+      if (brightness > 70) { // Skip dark colors - minimum brightness threshold
         palette.push(color);
       }
     }

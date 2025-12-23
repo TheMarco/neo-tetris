@@ -13,6 +13,9 @@ export default class PreloadScene extends Phaser.Scene {
     // Load block sprite sheet (grayscale with depth)
     this.load.image('blocks-spritesheet', 'assets/blocks-sprite.png');
 
+    // Load crush animation sprite (40x8px = 5 frames of 8x8px)
+    this.load.image('crush-spritesheet', 'assets/crush.png');
+
     // Load bitmap font (Thick 8x8 from frostyfreeze)
     this.load.bitmapFont('pixel-font', 'assets/fonts/thick_8x8.png', 'assets/fonts/thick_8x8.xml');
 
@@ -33,13 +36,8 @@ export default class PreloadScene extends Phaser.Scene {
     titleImage.setOrigin(0, 0);
     titleImage.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
 
-    // Game title
-    const titleText = this.add.bitmapText(GAME_WIDTH / 2, 60, 'pixel-font', 'STACK PROTOCOL', 20).setOrigin(0.5);
-    titleText.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
-    titleText.setDepth(10);
-
-    // "Press space to start" text
-    const startText = this.add.bitmapText(GAME_WIDTH / 2, 140, 'pixel-font', 'PRESS SPACE TO START', 10).setOrigin(0.5);
+    // "Press space to start" text - positioned in bottom third
+    const startText = this.add.bitmapText(GAME_WIDTH / 2, GAME_HEIGHT * 0.7 + 20, 'pixel-font', 'PRESS SPACE TO START', 10).setOrigin(0.5);
     startText.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
     startText.setDepth(10);
 
@@ -52,8 +50,8 @@ export default class PreloadScene extends Phaser.Scene {
       repeat: -1
     });
 
-    // Credits text
-    const creditsText = this.add.bitmapText(GAME_WIDTH / 2, 200, 'pixel-font', 'BY MARCO VAN HYLCKAMA VLIEG', 10).setOrigin(0.5);
+    // Credits text - positioned below start text in bottom third
+    const creditsText = this.add.bitmapText(GAME_WIDTH / 2, GAME_HEIGHT * 0.8 + 20, 'pixel-font', 'BY MARCO VAN HYLCKAMA VLIEG', 10).setOrigin(0.5);
     creditsText.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
     creditsText.setDepth(10);
 

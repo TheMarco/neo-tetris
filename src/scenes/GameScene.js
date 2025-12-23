@@ -59,12 +59,18 @@ export default class GameScene extends Phaser.Scene {
     this.clearing = false;
     this.dropCounter = 0; this.dropInterval = LEVEL_SPEEDS[0];
     this.softDropping = false; this.softDropCounter = 0;
+    this.inputEnabled = true;
     this.currentPiece = null; this.nextPiece = null;
     this.currentX = 0; this.currentY = 0;
     this.blockSprites = []; this.ghostSprites = [];
-    this.loadLevel(this.level); this.setupInput(); this.createUI();
+    this.setupInput();
+    this.loadLevel(this.level, false); // Load level first without intro
+    this.createUI(); // Create UI after level is loaded
     this.spawnPiece(); this.nextPiece = this.getRandomPiece();
     this.updateNextPieceDisplay();
+
+    // Show intro animation after everything is set up
+    this.showLevelIntro();
   }
 
   createEmptyGrid() {
@@ -73,18 +79,73 @@ export default class GameScene extends Phaser.Scene {
     return grid;
   }
 
-  loadLevel(level) {
+  loadLevel(level, showIntro = false) {
     if (this.currentMusic) this.currentMusic.stop();
     const backdropKey = `backdrop-${level}`;
     if (this.backdrop) this.backdrop.destroy();
     this.backdrop = this.add.image(0, 0, backdropKey).setOrigin(0, 0);
     this.backdrop.setDisplaySize(GAME_WIDTH, GAME_HEIGHT);
-    this.backdrop.setDepth(-1);  // <-- ADD THIS LINE
+    this.backdrop.setDepth(-1);
     this.colorPalette = ColorExtractor.extractPalette(this, backdropKey);
     this.createBlockTextures();
     const musicKey = `music-${level}`;
     this.currentMusic = this.sound.add(musicKey, { loop: true, volume: 0.5 });
-    this.currentMusic.play(); this.redrawGrid();
+    this.currentMusic.play();
+    this.redrawGrid();
+
+    if (showIntro) {
+      this.showLevelIntro();
+    }
+  }
+
+  showLevelIntro() {
+    // Immediately move containers off-screen (before any delay)
+    if (this.playAreaContainer) {
+      this.playAreaContainer.y = -GAME_HEIGHT;
+    }
+    if (this.uiPanelContainer) {
+      this.uiPanelContainer.y = -GAME_HEIGHT;
+    }
+
+    // Hide all block sprites (current piece and grid)
+    this.blockSprites.forEach(sprite => sprite.setVisible(false));
+    this.ghostSprites.forEach(sprite => sprite.setVisible(false));
+
+    // Disable input temporarily
+    this.inputEnabled = false;
+
+    // Wait 1 second showing just the backdrop
+    this.time.delayedCall(1000, () => {
+      // Play woosh sound
+      SoundGenerator.playWoosh();
+
+      // Animate play area falling in
+      if (this.playAreaContainer) {
+        this.tweens.add({
+          targets: this.playAreaContainer,
+          y: 0,
+          duration: 600,
+          ease: 'Bounce.easeOut'
+        });
+      }
+
+      // Animate UI panel falling in (slightly delayed)
+      if (this.uiPanelContainer) {
+        this.tweens.add({
+          targets: this.uiPanelContainer,
+          y: 0,
+          duration: 600,
+          delay: 100,
+          ease: 'Bounce.easeOut',
+          onComplete: () => {
+            // Show blocks and re-enable input after animations complete
+            this.blockSprites.forEach(sprite => sprite.setVisible(true));
+            this.ghostSprites.forEach(sprite => sprite.setVisible(true));
+            this.inputEnabled = true;
+          }
+        });
+      }
+    });
   }
 
   createBlockTextures() {
@@ -130,10 +191,15 @@ export default class GameScene extends Phaser.Scene {
   }
 
   createUI() {
-    const g = this.add.graphics();
+    // Create container for play area (so it can be animated as a unit)
+    this.playAreaContainer = this.add.container(0, 0);
+    const playAreaGraphics = this.add.graphics();
+    this.drawNESFrame(playAreaGraphics, PLAY_AREA_X - 2, PLAY_AREA_Y - 2, PLAY_AREA_WIDTH + 5, PLAY_AREA_HEIGHT + 4);
+    this.playAreaContainer.add(playAreaGraphics);
 
-    // Play area frame (frame draws around the play area)
-    this.drawNESFrame(g, PLAY_AREA_X - 2, PLAY_AREA_Y - 2, PLAY_AREA_WIDTH + 5, PLAY_AREA_HEIGHT + 4);
+    // Create container for right-side UI panels
+    this.uiPanelContainer = this.add.container(0, 0);
+    const panelGraphics = this.add.graphics();
 
     // UI text positions - align first frame with play area top
     const frameWidth = UI.PANEL_WIDTH - 3;
@@ -141,32 +207,44 @@ export default class GameScene extends Phaser.Scene {
     let y = PLAY_AREA_Y; // Align with play area top
 
     // SCORE frame
-    this.drawNESFrame(g, UI.PANEL_X, y - 2, frameWidth, 26);
-    this.createBitmapText(x, y + 2, 'SCORE');
+    this.drawNESFrame(panelGraphics, UI.PANEL_X, y - 2, frameWidth, 26);
+    const scoreLabel = this.createBitmapText(x, y + 2, 'SCORE');
     y += 12;
     this.scoreText = this.createBitmapText(x, y + 2, '000000');
     y += 12 + 12; // 12px vertical space
 
     // LEVEL frame
-    this.drawNESFrame(g, UI.PANEL_X, y - 2, frameWidth, 26);
-    this.createBitmapText(x, y + 2, 'LEVEL');
+    this.drawNESFrame(panelGraphics, UI.PANEL_X, y - 2, frameWidth, 26);
+    const levelLabel = this.createBitmapText(x, y + 2, 'LEVEL');
     y += 12;
     this.levelText = this.createBitmapText(x, y + 2, '1');
     y += 12 + 12; // 12px vertical space
 
     // LINES frame
-    this.drawNESFrame(g, UI.PANEL_X, y - 2, frameWidth, 26);
-    this.createBitmapText(x, y + 2, 'LINES');
+    this.drawNESFrame(panelGraphics, UI.PANEL_X, y - 2, frameWidth, 26);
+    const linesLabel = this.createBitmapText(x, y + 2, 'LINES');
     y += 12;
     this.linesText = this.createBitmapText(x, y + 2, '0');
     y += 12 + 12; // 12px vertical space
 
     // NEXT frame
     const nextFrameHeight = 42; // Enough for piece preview + 2px top padding
-    this.drawNESFrame(g, UI.PANEL_X, y - 2, frameWidth, nextFrameHeight);
-    this.createBitmapText(x, y + 2, 'NEXT');
+    this.drawNESFrame(panelGraphics, UI.PANEL_X, y - 2, frameWidth, nextFrameHeight);
+    this.nextPieceText = this.createBitmapText(x, y + 2, 'NEXT');
     this.nextPieceY = y + 16;
     this.nextPieceX = x;
+
+    // Add all UI elements to the container
+    this.uiPanelContainer.add([
+      panelGraphics,
+      scoreLabel,
+      this.scoreText,
+      levelLabel,
+      this.levelText,
+      linesLabel,
+      this.linesText,
+      this.nextPieceText
+    ]);
   }
 
   drawNESFrame(g, x, y, w, h) {
@@ -192,7 +270,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   update(time, delta) {
-    if (this.gameOver) return;
+    if (this.gameOver || !this.inputEnabled) return;
 
     // Pause check - always available
     if (Phaser.Input.Keyboard.JustDown(this.pKey)) {
@@ -245,6 +323,7 @@ export default class GameScene extends Phaser.Scene {
         if (this.moveDown()) {
           this.score += SCORES.SOFT_DROP;
           this.updateUI();
+          SoundGenerator.playSoftDrop();
         }
       }
     } else {
@@ -294,7 +373,47 @@ export default class GameScene extends Phaser.Scene {
 
   rotatePiece() {
     const rotated = this.getRotatedPiece(this.currentPiece);
-    if (!this.checkCollision(rotated, this.currentX, this.currentY)) { this.currentPiece = rotated; SoundGenerator.playRotate(); }
+
+    // Try rotation at current position
+    if (!this.checkCollision(rotated, this.currentX, this.currentY)) {
+      this.currentPiece = rotated;
+      SoundGenerator.playRotate();
+      return;
+    }
+
+    // Wall kick: try shifting right
+    if (!this.checkCollision(rotated, this.currentX + 1, this.currentY)) {
+      this.currentPiece = rotated;
+      this.currentX++;
+      SoundGenerator.playRotate();
+      return;
+    }
+
+    // Wall kick: try shifting left
+    if (!this.checkCollision(rotated, this.currentX - 1, this.currentY)) {
+      this.currentPiece = rotated;
+      this.currentX--;
+      SoundGenerator.playRotate();
+      return;
+    }
+
+    // Wall kick: try shifting right 2 spaces (for I-piece)
+    if (!this.checkCollision(rotated, this.currentX + 2, this.currentY)) {
+      this.currentPiece = rotated;
+      this.currentX += 2;
+      SoundGenerator.playRotate();
+      return;
+    }
+
+    // Wall kick: try shifting left 2 spaces (for I-piece)
+    if (!this.checkCollision(rotated, this.currentX - 2, this.currentY)) {
+      this.currentPiece = rotated;
+      this.currentX -= 2;
+      SoundGenerator.playRotate();
+      return;
+    }
+
+    // Rotation failed - no valid position found
   }
 
   getRotatedPiece(piece) {
@@ -368,9 +487,8 @@ export default class GameScene extends Phaser.Scene {
     // Block game updates during line clear
     this.clearing = true;
 
-    // Play sound
-    if (completeLines.length === 4) SoundGenerator.playTetris();
-    else SoundGenerator.playLineClear();
+    // Play sound based on number of lines cleared
+    SoundGenerator.playLineClear(completeLines.length);
 
     // Show the locked piece first
     this.redrawGrid();
@@ -380,86 +498,69 @@ export default class GameScene extends Phaser.Scene {
   }
 
   animateLineClear(completeLines) {
-    // Create spectacular crush effect for each block
+    // Create crush animation for each block
     const crushSprites = [];
-    const particles = [];
+    const texturesToCleanup = [];
 
     completeLines.forEach(y => {
       for (let x = 0; x < GRID_WIDTH; x++) {
+        const blockType = this.grid[y][x];
+        if (!blockType) continue;
+
         const px = PLAY_AREA_X + x * BLOCK_SIZE;
         const py = PLAY_AREA_Y + y * BLOCK_SIZE;
 
-        // Main block that will get crushed
-        const block = this.add.rectangle(px + BLOCK_SIZE/2, py + BLOCK_SIZE/2, BLOCK_SIZE, BLOCK_SIZE, 0xffffff);
-        block.setDepth(50);
-        crushSprites.push(block);
+        // Get the block's color from the palette
+        const colorIndex = blockType - 1;
+        const color = this.colorPalette[colorIndex % this.colorPalette.length];
 
-        // Create 4 particle pieces per block for explosion
-        for (let i = 0; i < 4; i++) {
-          const particle = this.add.rectangle(px + BLOCK_SIZE/2, py + BLOCK_SIZE/2, 2, 2, 0xffffff);
-          particle.setDepth(51);
-          particle.setVisible(false);
-          particles.push({ sprite: particle, x: px + BLOCK_SIZE/2, y: py + BLOCK_SIZE/2 });
+        // Create unique crush animation frames for this specific block instance
+        const uniqueId = `${Date.now()}-${x}-${y}-${Math.random().toString(36).substr(2, 9)}`;
+        const frames = [];
+        for (let f = 0; f < 5; f++) {
+          const frameKey = `crush-${uniqueId}-${f}`;
+          SpriteBlockRenderer.createCrushTexture(this, color, f, frameKey);
+          frames.push(frameKey);
+          texturesToCleanup.push(frameKey);
+        }
+
+        // Create sprite starting with frame 4 (most intact)
+        const sprite = this.add.sprite(px, py, frames[4]).setOrigin(0, 0);
+        sprite.setDepth(50);
+        crushSprites.push({ sprite, frames });
+      }
+    });
+
+    // Cycle through the 5 crush frames in REVERSE: 4 -> 3 -> 2 -> 1 -> 0
+    let frameCounter = 4;
+
+    this.time.addEvent({
+      delay: 75, // 75ms per frame (twice as fast)
+      repeat: 4, // repeat 4 times = 5 total callbacks (frames 4,3,2,1,0)
+      callback: () => {
+        if (frameCounter > 0) {
+          frameCounter--;
+          crushSprites.forEach(crushData => {
+            crushData.sprite.setTexture(crushData.frames[frameCounter]);
+          });
         }
       }
     });
 
-    // Phase 1: Rapid flash
-    this.tweens.add({
-      targets: crushSprites,
-      alpha: { from: 1, to: 0.5 },
-      duration: 60,
-      yoyo: true,
-      repeat: 2,
-      onComplete: () => {
-        // Phase 2: Violent crush from top and bottom
-        this.tweens.add({
-          targets: crushSprites,
-          scaleY: 0.05,
-          scaleX: 2.0,
-          alpha: 0.9,
-          duration: 80,
-          ease: 'Power3',
-          onComplete: () => {
-            // Phase 3: Horizontal crush to nothing
-            this.tweens.add({
-              targets: crushSprites,
-              scaleX: 0,
-              scaleY: 0.02,
-              alpha: 0.5,
-              duration: 60,
-              ease: 'Power2',
-              onComplete: () => {
-                // Phase 4: Particle explosion
-                particles.forEach(p => {
-                  p.sprite.setVisible(true);
-                  const angle = Math.random() * Math.PI * 2;
-                  const speed = 20 + Math.random() * 30;
-                  const vx = Math.cos(angle) * speed;
-                  const vy = Math.sin(angle) * speed;
+    // After all 5 frames (4 shows immediately, then 3,2,1,0 at 75ms each = 300ms total), clean up
+    this.time.delayedCall(350, () => {
+      crushSprites.forEach(crushData => {
+        crushData.sprite.destroy();
+      });
 
-                  this.tweens.add({
-                    targets: p.sprite,
-                    x: p.x + vx,
-                    y: p.y + vy,
-                    alpha: 0,
-                    scaleX: 0,
-                    scaleY: 0,
-                    duration: 200 + Math.random() * 100,
-                    ease: 'Power2'
-                  });
-                });
+      // Clean up all textures
+      texturesToCleanup.forEach(frameKey => {
+        if (this.textures.exists(frameKey)) {
+          this.textures.remove(frameKey);
+        }
+      });
 
-                this.time.delayedCall(300, () => {
-                  crushSprites.forEach(s => s.destroy());
-                  particles.forEach(p => p.sprite.destroy());
-                  this.finishLineClear(completeLines);
-                });
-              }
-            });
-          }
-        });
-      }
+      this.finishLineClear(completeLines);
     });
   }
 
@@ -568,59 +669,158 @@ export default class GameScene extends Phaser.Scene {
     // Keep game paused during transition
     this.clearing = true;
 
-    // Flash effect
-    const flash = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0xffffff);
-    flash.setDepth(200);
-    flash.setAlpha(0);
+    // Black screen overlay
+    const blackScreen = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000);
+    blackScreen.setDepth(200);
+    blackScreen.setAlpha(0);
 
-    // Level up text
-    const levelText = this.createBitmapText(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 10, `LEVEL ${newLevel}`, 20);
-    levelText.setOrigin(0.5);
-    levelText.setDepth(201);
-    levelText.setAlpha(0);
-
-    // Subtitle
-    const subtitle = this.createBitmapText(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 15, 'SPEED UP', 10);
-    subtitle.setOrigin(0.5);
-    subtitle.setDepth(201);
-    subtitle.setAlpha(0);
-
-    // Animation sequence
+    // Fade to black
     this.tweens.add({
-      targets: flash,
-      alpha: 0.8,
-      duration: 100,
-      yoyo: true,
-      repeat: 2,
+      targets: blackScreen,
+      alpha: 1,
+      duration: 300,
+      ease: 'Power2',
       onComplete: () => {
-        // Show level text with zoom effect
-        levelText.setScale(0.5);
-        subtitle.setScale(0.5);
+        // Pre-load the new level's palette and create preview blocks
+        const backdropKey = `backdrop-${newLevel}`;
+        const rawPalette = ColorExtractor.extractPalette(this, backdropKey);
+        const newPalette = SpriteBlockRenderer.enhancePalette(rawPalette);
 
+        // Level up text
+        const levelText = this.createBitmapText(GAME_WIDTH / 2, 60, `LEVEL ${newLevel}`, 20);
+        levelText.setOrigin(0.5);
+        levelText.setDepth(201);
+        levelText.setAlpha(0);
+
+        // Subtitle
+        const subtitle = this.createBitmapText(GAME_WIDTH / 2, 85, 'SPEED INCREASED', 10);
+        subtitle.setOrigin(0.5);
+        subtitle.setDepth(201);
+        subtitle.setAlpha(0);
+
+        // Create preview blocks showing new level's style
+        const previewBlocks = [];
+        const startX = GAME_WIDTH / 2 - 32; // Center 8 blocks (8*8 = 64px wide)
+        const startY = 120;
+
+        for (let i = 0; i < 7; i++) {
+          const x = startX + i * 10;
+          const y = startY;
+          const blockKey = `preview-block-${i}`;
+
+          // Create block texture with new level's palette
+          SpriteBlockRenderer.createBlockTexture(this, newPalette, newLevel, blockKey, i);
+
+          const block = this.add.sprite(x, y, blockKey).setOrigin(0, 0);
+          block.setDepth(201);
+          block.setAlpha(0);
+          block.setScale(0.5);
+          previewBlocks.push({ sprite: block, key: blockKey });
+        }
+
+        // Animate text and blocks in
         this.tweens.add({
           targets: [levelText, subtitle],
           alpha: 1,
+          duration: 400,
+          ease: 'Power2'
+        });
+
+        this.tweens.add({
+          targets: previewBlocks.map(b => b.sprite),
+          alpha: 1,
           scale: 1,
-          duration: 200,
+          duration: 500,
+          delay: 200,
           ease: 'Back.easeOut',
           onComplete: () => {
             // Hold for a moment
-            this.time.delayedCall(800, () => {
-              // Fade out
+            this.time.delayedCall(1200, () => {
+              // Fade out text and preview blocks only (keep black screen)
               this.tweens.add({
-                targets: [levelText, subtitle, flash],
+                targets: [levelText, subtitle, ...previewBlocks.map(b => b.sprite)],
                 alpha: 0,
-                duration: 200,
+                duration: 300,
                 onComplete: () => {
-                  flash.destroy();
+                  // Clean up text and preview blocks
                   levelText.destroy();
                   subtitle.destroy();
+                  previewBlocks.forEach(b => {
+                    b.sprite.destroy();
+                    if (this.textures.exists(b.key)) {
+                      this.textures.remove(b.key);
+                    }
+                  });
 
-                  // Load new level
-                  this.loadLevel(newLevel);
-                  this.updateUI();
-                  this.clearing = false;
-                  this.spawnPiece();
+                  // Black screen stays for a moment
+                  this.time.delayedCall(300, () => {
+                    // Destroy old level elements while screen is black
+                    this.blockSprites.forEach(sprite => sprite.destroy());
+                    this.blockSprites = [];
+                    this.ghostSprites.forEach(sprite => sprite.destroy());
+                    this.ghostSprites = [];
+
+                    // Load new level (no intro yet)
+                    this.loadLevel(newLevel, false);
+                    this.updateUI();
+                    this.clearing = false;
+                    this.spawnPiece();
+
+                    // IMMEDIATELY hide UI containers before fading out black screen
+                    if (this.playAreaContainer) {
+                      this.playAreaContainer.y = -GAME_HEIGHT;
+                    }
+                    if (this.uiPanelContainer) {
+                      this.uiPanelContainer.y = -GAME_HEIGHT;
+                    }
+                    this.blockSprites.forEach(sprite => sprite.setVisible(false));
+                    this.ghostSprites.forEach(sprite => sprite.setVisible(false));
+                    this.inputEnabled = false;
+
+                    // Fade out black screen to reveal ONLY the backdrop
+                    this.tweens.add({
+                      targets: blackScreen,
+                      alpha: 0,
+                      duration: 500,
+                      ease: 'Power2',
+                      onComplete: () => {
+                        blackScreen.destroy();
+                        // Now show the intro animation (UI falls in)
+                        // Wait 1 second showing just the backdrop
+                        this.time.delayedCall(1000, () => {
+                          // Play woosh sound
+                          SoundGenerator.playWoosh();
+
+                          // Animate play area falling in
+                          if (this.playAreaContainer) {
+                            this.tweens.add({
+                              targets: this.playAreaContainer,
+                              y: 0,
+                              duration: 600,
+                              ease: 'Bounce.easeOut'
+                            });
+                          }
+
+                          // Animate UI panel falling in (slightly delayed)
+                          if (this.uiPanelContainer) {
+                            this.tweens.add({
+                              targets: this.uiPanelContainer,
+                              y: 0,
+                              duration: 600,
+                              delay: 100,
+                              ease: 'Bounce.easeOut',
+                              onComplete: () => {
+                                // Show blocks and re-enable input after animations complete
+                                this.blockSprites.forEach(sprite => sprite.setVisible(true));
+                                this.ghostSprites.forEach(sprite => sprite.setVisible(true));
+                                this.inputEnabled = true;
+                              }
+                            });
+                          }
+                        });
+                      }
+                    });
+                  });
                 }
               });
             });
@@ -698,6 +898,10 @@ export default class GameScene extends Phaser.Scene {
           const sprite = this.add.sprite(x, y, `block-${this.nextPiece.name}`).setOrigin(0, 0);
           sprite.setDepth(20);
           this.nextPieceSprites.push(sprite);
+          // Add to UI container so it animates with the panel
+          if (this.uiPanelContainer) {
+            this.uiPanelContainer.add(sprite);
+          }
         }
       }
     }

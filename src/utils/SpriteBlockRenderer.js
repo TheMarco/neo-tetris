@@ -80,47 +80,99 @@ export default class SpriteBlockRenderer {
   }
 
   /**
-   * Ensure colors are bright and distinct
+   * Create a crush animation frame texture
+   * @param {Phaser.Scene} scene - The Phaser scene
+   * @param {number} color - The color to apply
+   * @param {number} frameIndex - Which frame (0-4)
+   * @param {string} key - Texture key to create
+   */
+  static createCrushTexture(scene, color, frameIndex, key) {
+    // Check if texture already exists
+    if (scene.textures.exists(key)) {
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    canvas.width = BLOCK_SIZE;
+    canvas.height = BLOCK_SIZE;
+
+    const r = (color >> 16) & 0xFF;
+    const g = (color >> 8) & 0xFF;
+    const b = color & 0xFF;
+
+    // Get the crush sprite sheet
+    const spriteSheet = scene.textures.get('crush-spritesheet').getSourceImage();
+    const spriteX = frameIndex * BLOCK_SIZE;
+
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.imageSmoothingEnabled = false;
+    tempCanvas.width = spriteSheet.width;
+    tempCanvas.height = spriteSheet.height;
+    tempCtx.drawImage(spriteSheet, 0, 0);
+
+    const spriteData = tempCtx.getImageData(spriteX, 0, BLOCK_SIZE, BLOCK_SIZE);
+    const pixels = spriteData.data;
+
+    const outputData = ctx.createImageData(BLOCK_SIZE, BLOCK_SIZE);
+    const output = outputData.data;
+
+    // Apply grayscale brightness to color (darker = more visible, lighter/white = transparent)
+    for (let i = 0; i < pixels.length; i += 4) {
+      const brightness = pixels[i]; // Grayscale R channel
+      const alpha = pixels[i + 3];
+
+      // Light pixels or transparent become fully transparent
+      if (brightness >= 200 || alpha === 0) {
+        output[i] = 0;
+        output[i + 1] = 0;
+        output[i + 2] = 0;
+        output[i + 3] = 0;
+      } else {
+        // Darker pixels get colored - use brightness to modulate color intensity
+        // Darker sprite pixels = darker colored blocks
+        const multiplier = 0.3 + (brightness / 255) * 0.9;
+        output[i] = Math.min(255, Math.floor(r * multiplier));
+        output[i + 1] = Math.min(255, Math.floor(g * multiplier));
+        output[i + 2] = Math.min(255, Math.floor(b * multiplier));
+        output[i + 3] = 255;
+      }
+    }
+
+    ctx.putImageData(outputData, 0, 0);
+
+    const texture = scene.textures.addCanvas(key, canvas);
+    if (texture) {
+      texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    }
+  }
+
+  /**
+   * Subtly enhance colors with 20% extra contrast
    * @param {number[]} palette - Original palette from backdrop
-   * @returns {number[]} Enhanced palette with bright, distinct colors
+   * @returns {number[]} Enhanced palette with subtle contrast boost
    */
   static enhancePalette(palette) {
     const enhanced = [];
-    
+
     for (let i = 0; i < palette.length; i++) {
       let color = palette[i];
       let r = (color >> 16) & 0xFF;
       let g = (color >> 8) & 0xFF;
       let b = color & 0xFF;
-      
-      // Calculate brightness
-      const brightness = (r + g + b) / 3;
-      
-      // If too dark, brighten it
-      if (brightness < 100) {
-        const boost = (100 - brightness) / brightness;
-        r = Math.min(255, Math.floor(r * (1 + boost)));
-        g = Math.min(255, Math.floor(g * (1 + boost)));
-        b = Math.min(255, Math.floor(b * (1 + boost)));
-      }
-      
-      // Ensure minimum saturation for visibility
-      const max = Math.max(r, g, b);
-      const min = Math.min(r, g, b);
-      const saturation = max === 0 ? 0 : (max - min) / max;
-      
-      if (saturation < 0.3) {
-        // Boost the dominant channel
-        if (r >= g && r >= b) r = Math.min(255, r + 50);
-        else if (g >= r && g >= b) g = Math.min(255, g + 50);
-        else b = Math.min(255, b + 50);
-      }
-      
+
+      // Add 20% contrast: push values away from middle gray (128)
+      const contrastFactor = 0.2;
+      r = Math.min(255, Math.max(0, Math.floor(128 + (r - 128) * (1 + contrastFactor))));
+      g = Math.min(255, Math.max(0, Math.floor(128 + (g - 128) * (1 + contrastFactor))));
+      b = Math.min(255, Math.max(0, Math.floor(128 + (b - 128) * (1 + contrastFactor))));
+
       enhanced.push((r << 16) | (g << 8) | b);
     }
-    
-    // Ensure all colors are sufficiently different
-    return this.ensureDistinctColors(enhanced);
+
+    return enhanced;
   }
 
   /**
