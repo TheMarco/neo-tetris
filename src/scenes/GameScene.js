@@ -2,11 +2,12 @@ import Phaser from 'phaser';
 import {
   GAME_WIDTH, GAME_HEIGHT, BLOCK_SIZE, GRID_WIDTH, GRID_HEIGHT,
   PLAY_AREA_X, PLAY_AREA_Y, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT,
-  TETROMINOES, SCORES, LEVEL_SPEEDS, LINES_PER_LEVEL, MAX_LEVEL, UI
+  TETROMINOES, SCORES, LEVEL_SPEEDS, MAX_LEVEL, UI
 } from '../constants.js';
 import ColorExtractor from '../utils/ColorExtractor.js';
 import SpriteBlockRenderer from '../utils/SpriteBlockRenderer.js';
 import SoundGenerator from '../utils/SoundGenerator.js';
+import { CONFIG } from '../config.js';
 
 export default class GameScene extends Phaser.Scene {
   constructor() { super({ key: 'GameScene' }); }
@@ -648,7 +649,7 @@ export default class GameScene extends Phaser.Scene {
     }
 
     // Check for level up
-    const newLevel = Math.min(MAX_LEVEL, Math.floor(this.lines / LINES_PER_LEVEL) + 1);
+    const newLevel = Math.min(MAX_LEVEL, Math.floor(this.lines / CONFIG.LINES_PER_LEVEL) + 1);
     if (newLevel > this.level) {
       this.level = newLevel;
       this.dropInterval = LEVEL_SPEEDS[this.level - 1];
