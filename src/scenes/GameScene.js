@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import {
   GAME_WIDTH, GAME_HEIGHT, BLOCK_SIZE, GRID_WIDTH, GRID_HEIGHT,
   PLAY_AREA_X, PLAY_AREA_Y, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT,
-  TETROMINOES, ADVANCED_TETROMINOES, SCORES, LEVEL_SPEEDS, MAX_LEVEL, UI, BORDER_OFFSET
+  TETROMINOES, ADVANCED_TETROMINOES, SCORES, LEVEL_SPEEDS, MAX_LEVEL, UI, BORDER_OFFSET, LEVEL_TITLES
 } from '../constants.js';
 import ColorExtractor from '../utils/ColorExtractor.js';
 import SpriteBlockRenderer from '../utils/SpriteBlockRenderer.js';
@@ -119,8 +119,29 @@ export default class GameScene extends Phaser.Scene {
     // Disable input temporarily
     this.inputEnabled = false;
 
-    // Wait 1 second showing just the backdrop
-    this.time.delayedCall(1000, () => {
+    // Show level title text
+    const levelTitle = LEVEL_TITLES[this.level] || 'Unknown';
+    const levelText = this.createBitmapText(GAME_WIDTH / 2 + BORDER_OFFSET, GAME_HEIGHT / 2 - 10, `LEVEL ${this.level}`, 16);
+    levelText.setOrigin(0.5);
+    levelText.setDepth(201);
+
+    const titleText = this.createBitmapText(GAME_WIDTH / 2 + BORDER_OFFSET, GAME_HEIGHT / 2 + 10, levelTitle, 10);
+    titleText.setOrigin(0.5);
+    titleText.setDepth(201);
+
+    // Wait 1 second showing backdrop and title
+    this.time.delayedCall(1500, () => {
+      // Fade out title texts
+      this.tweens.add({
+        targets: [levelText, titleText],
+        alpha: 0,
+        duration: 300,
+        onComplete: () => {
+          levelText.destroy();
+          titleText.destroy();
+        }
+      });
+
       // Play woosh sound
       SoundGenerator.playWoosh();
 
@@ -721,8 +742,9 @@ export default class GameScene extends Phaser.Scene {
         levelText.setDepth(201);
         levelText.setAlpha(0);
 
-        // Subtitle
-        const subtitle = this.createBitmapText(GAME_WIDTH / 2 + BORDER_OFFSET, 85, 'SPEED INCREASED', 10);
+        // Subtitle - show level title
+        const levelTitle = LEVEL_TITLES[newLevel] || 'Unknown';
+        const subtitle = this.createBitmapText(GAME_WIDTH / 2 + BORDER_OFFSET, 85, levelTitle, 10);
         subtitle.setOrigin(0.5);
         subtitle.setDepth(201);
         subtitle.setAlpha(0);

@@ -161,6 +161,20 @@ export const LEVEL_SPEEDS = [
   6    // Level 10 - very challenging
 ];
 
+// Level titles for intro screens
+export const LEVEL_TITLES = {
+  1: 'Low Earth Orbit',
+  2: 'Moon Surface',
+  3: 'Mars Horizon',
+  4: 'Asteroid Belt',
+  5: 'Jupiter Storms',
+  6: 'Deep Space Station',
+  7: 'Nebula Expanse',
+  8: 'Binary Star System',
+  9: 'Alien Megastructure',
+  10: 'Edge of the Universe'
+};
+
 // UI Layout - single panel to the right of play area
 export const UI = {
   // Panel positioned right of play area with 8px gap between frames

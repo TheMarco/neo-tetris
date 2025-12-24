@@ -78,6 +78,11 @@ export default class PreloadScene extends Phaser.Scene {
     startText.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
     startText.setDepth(10);
 
+    // Demo mode timer - start demo after 10 seconds of inactivity
+    this.demoTimer = this.time.delayedCall(10000, () => {
+      this.startDemoMode();
+    });
+
     // Blinking effect for start text
     this.tweens.add({
       targets: startText,
