@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import GameScene from './scenes/GameScene.js';
 import PreloadScene from './scenes/PreloadScene.js';
 import ModeSelectScene from './scenes/ModeSelectScene.js';
+import { createShaderOverlay } from './shaderOverlay.js';
 
 const config = {
   type: Phaser.WEBGL,
@@ -23,12 +24,17 @@ const config = {
     antialiasGL: false
   },
   scale: {
-    mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
-    zoom: 3
+    mode: Phaser.Scale.NONE,
+    width: 256,
+    height: 224
   },
   scene: [PreloadScene, ModeSelectScene, GameScene]
 };
 
 const game = new Phaser.Game(config);
+
+// Apply shader overlay to the scaled canvas
+setTimeout(() => {
+  createShaderOverlay(game.canvas);
+}, 100);
 

@@ -12,7 +12,7 @@ export const GRID_HEIGHT = 20;
 export const PLAY_AREA_WIDTH = GRID_WIDTH * BLOCK_SIZE; // 80 pixels
 export const PLAY_AREA_HEIGHT = GRID_HEIGHT * BLOCK_SIZE; // 160 pixels
 export const PLAY_AREA_X = 80; // Centered with room for UI
-export const PLAY_AREA_Y = 48; // Room for header
+export const PLAY_AREA_Y = 28; // Room for header (moved up 20 pixels from original 48)
 
 // Level progression
 export const LINES_PER_LEVEL = 2; // Temporary for testing

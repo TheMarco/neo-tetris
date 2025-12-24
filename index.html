@@ -19,16 +19,37 @@
             min-height: 100vh;
             font-family: 'RetroArcade', monospace;
         }
+        #tv-frame {
+            position: relative;
+            width: 1000px;
+            height: 737.5px; /* Maintains aspect ratio: 1000 * (590/800) */
+            background: url('/assets/tv.png') no-repeat center;
+            background-size: contain;
+        }
+        #game-container {
+            position: absolute;
+            /* Screen area inside the TV frame - maintaining 256:224 aspect ratio */
+            /* Scaled up by 1.25x (1000/800) to match TV frame increase */
+            width: 636.25px; /* 509 * 1.25 */
+            height: 556.25px; /* 445 * 1.25 */
+            /* Scaled positions by 1.25x */
+            left: 182.5px; /* 146 * 1.25 */
+            top: 75.75px; /* 73.75 + 2 */
+        }
         #game-container canvas {
             image-rendering: -moz-crisp-edges;
             image-rendering: -webkit-crisp-edges;
             image-rendering: pixelated;
             image-rendering: crisp-edges;
+            width: 100% !important;
+            height: 100% !important;
         }
     </style>
 </head>
 <body>
-    <div id="game-container"></div>
+    <div id="tv-frame">
+        <div id="game-container"></div>
+    </div>
     <script type="module" src="/src/main.js"></script>
 </body>
 </html>
